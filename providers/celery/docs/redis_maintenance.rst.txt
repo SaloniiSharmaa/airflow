@@ -1,0 +1,78 @@
+---
+
+# Redis Maintenance Guide for Apache Airflow 
+
+## Overview
+When Airflow is configured to use Celery with Redis as the message broker, Redis temporarily stores task messages, results, locks and message queues for Celery tasks. Over time, without proper maintenance, Redis can accumulate stale keys, potentially leading to performance degradation or out-of-memory (OOM) errors.
+
+This guide provides best practices for managing Redis keys, setting appropriate TTL (Time-to-Live) values, and ensuring the longevity and stability of your Airflow deployment.
+
+---
+
+## Understanding Redis Usage in Celery
+
+### 1. Redis as Message Broker and Result Backend
+
+In a Celery setup, Redis can function both as a message broker and a result backend:
+
+* **Message Broker**: Facilitates communication between the Airflow scheduler and workers.
+* **Result Backend**: Stores the results of task executions.
+
+It's crucial to differentiate between these roles to apply appropriate maintenance strategies.
+
+### 2. Key Expiration and TTL
+
+Celery tasks store their results in Redis as keys. By default, these keys have a TTL of 1 day (86400 seconds). Without setting a TTL, stale keys can accumulate, consuming memory and potentially leading to Redis OOM errors.
+
+To set a TTL for task result keys, configure the `result_expires` parameter in your Celery application:
+
+```python
+from celery import Celery
+
+app = Celery('my_airflow_app', broker='redis://localhost:6379/0', backend='redis://localhost:6379/0')
+app.conf.result_expires = 86400  # Set TTL to 1 day
+```
+
+Adjust the TTL value based on your task execution patterns and requirements.
+
+---
+
+## Best Practices for Redis Maintenance
+
+### 1. Setting Appropriate TTL Values
+
+Choose a TTL that aligns with your task execution times. For instance:
+
+* **Short-running tasks**: Set a TTL of 1 day.
+* **Long-running tasks or DAGs**: Set a TTL of 7 days or more.
+
+Ensure that the TTL is longer than the maximum expected runtime of your tasks to prevent premature expiration.
+
+### 2. Periodic Cleanup of Stale Keys
+
+Implement a scheduled task to clean up keys that have exceeded their TTL. This can be achieved using Redis' `EXPIRE` command or by configuring Redis to automatically remove expired keys.
+
+### 3. Monitoring Redis Usage
+
+Regularly monitor Redis memory usage and key count to identify potential issues early. Tools like Redis' `INFO` command or external monitoring solutions can provide insights into Redis performance.
+
+---
+
+## Impact on Airflow Components
+
+### 1. Task History and XComs
+
+Task history and XComs are stored in Airflow's metadata database, not in Redis. Therefore, setting a TTL for Redis keys does not affect task history or XComs.
+
+### 2. Task Retries and Key Expiration
+
+If a task is retried and the result key has expired, Celery will recompute the task result. Ensure that your TTL settings account for potential task retries.
+
+---
+
+## Conclusion
+
+Proper Redis maintenance is essential for the stability and performance of your Airflow deployment when using the CeleryExecutor. By setting appropriate TTL values, implementing periodic cleanup strategies, and monitoring Redis usage, you can prevent potential issues and ensure smooth operation.
+
+---
+
